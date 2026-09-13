@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <script>
+        (function () {
+            try {
+                var saved = JSON.parse(localStorage.getItem('pronTycoon'));
+                if (saved && saved.theme === 'dark') {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                }
+            } catch (e) {}
+        })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>発音クリッカー</title>
+    <meta name="description" content="英単語を発音して資金を稼ぐ放置系クリッカーゲーム">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+
+        <!-- ヘッダー：残高と基本情報 -->
+        <header id="topbar">
+            <div class="topbar-main">
+                <span class="game-title">発音クリッカー</span>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div class="money-display">
+                        <span class="money-symbol">$</span><span id="money">0.00</span>
+                    </div>
+                    <button id="btn-settings" class="btn-settings" aria-label="設定" title="設定">⚙️</button>
+                    <button id="btn-help" class="btn-settings" aria-label="遊び方" title="遊び方ガイド">❔</button>
+                </div>
+            </div>
+            <div class="topbar-sub">
+                <span class="stat">毎秒 <strong id="dps">$0.00</strong></span>
+                <span class="stat-sep">|</span>
+                <span class="stat">図鑑ボーナス <strong id="bonus">+0%</strong></span>
+                <span class="stat-sep">|</span>
+                <span class="stat">総額 <strong id="total-money">$0.00</strong></span>
+                <span class="stat-sep">|</span>
+                <span class="stat">図鑑 <strong id="dict-progress">0/?</strong></span>
+            </div>
+        </header>
+
+        <!-- メイン：単語エリア -->
+        <section id="word-area">
+            <div class="word-top">
+                <div class="word-top-left">
+                    <span id="level-badge" class="badge lv1">中学</span>
+                    <span id="review-badge" class="review-badge" hidden>🔁 復習</span>
+                    <span id="combo-badge" class="combo-badge" hidden>🔥 <span id="combo-count">0</span>連続 (+<span id="combo-bonus-pct">0</span>%)</span>
+                </div>
+                <div class="reward-wrap">
+                    <span id="reward" class="reward-label">+$1.00</span>
+                    <button id="reward-info-btn" class="info-toggle" type="button" aria-label="ボーナス詳細を表示" aria-expanded="false">ⓘ</button>
+                    <div id="reward-info-text" class="reward-info-text" hidden>(+自動生産3秒分ボーナス)</div>
+                </div>
+            </div>
+
+            <div class="word-center">
+                <div id="word" class="the-word">loading</div>
+                <div id="ipa" class="the-ipa">/ ... /</div>
+                <div id="meaning-box" class="meaning" hidden>
+                    <span id="meaning-text"></span>
+                    <button id="inline-bookmark" class="dict-btn dict-bookmark" style="font-size:16px; margin-left:8px; vertical-align:middle; padding:0; display:none;" aria-label="ブックマーク登録" title="ブックマーク登録 / 解除">★</button>
+                </div>
+            </div>
+
+            <div id="heard" class="heard-text" role="status" aria-live="polite">マイクをオンにして発音してください</div>
+            <div id="accuracy-badge" class="accuracy-badge" role="status" aria-live="polite" hidden>発音精度 <strong id="accuracy-value">100%</strong></div>
+
+            <div class="mic-area">
+                <button id="mic" class="mic-btn" aria-label="マイク切替">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                </button>
+                <span id="mic-status" class="mic-label">OFF</span>
+                <span class="kbd-hint">Space:マイク　L:お手本　S:スキップ</span>
+            </div>
+
+            <div class="word-actions">
+                <button id="listen" class="btn-action">🔊 お手本</button>
+                <button id="skip" class="btn-action">⏭ スキップ</button>
+            </div>
+
+            <div class="text-fallback">
+                <input type="text" id="text-input" placeholder="キーボード入力（マイクが使えない場合）" autocomplete="off">
+                <button id="text-submit" class="btn-small">送信</button>
+            </div>
+        </section>
+
+        <!-- ショップ：タブ切替 -->
+        <section id="shop">
+            <nav class="tabs">
+                <button class="tab active" data-tab="shop">ショップ</button>
+                <button class="tab" data-tab="dictionary">図鑑</button>
+                <button class="tab" data-tab="achievements">実績<span id="achv-tab-badge" class="tab-badge" hidden></span></button>
+            </nav>
+
+            <div id="tab-shop" class="tab-body active">
+                <div class="shop-quicknav">
+                    <button class="shop-quicknav-btn" type="button" data-jump="facilities-list">🏢 施設</button>
+                    <button class="shop-quicknav-btn" type="button" data-jump="upgrades-list">⚡ 強化</button>
+                </div>
+                <h4 class="section-title">施設</h4>
+                <div id="facilities-list"></div>
+                <h4 class="section-title">強化</h4>
+                <div id="upgrades-list"></div>
+            </div>
+
+            <div id="tab-dictionary" class="tab-body">
+                <div class="dict-header">
+                    <div class="dict-stats-row">
+                        <span>登録済み <strong id="dict-count">0</strong> / <span id="dict-total">513</span></span>
+                        <span id="dict-milestone" class="dict-milestone-text">次のボーナスまであと5語</span>
+                    </div>
+                    <div class="dict-bar-wrap">
+                        <div id="dict-bar" class="dict-bar" style="width:0%"></div>
+                    </div>
+                    <div class="dict-filters">
+                        <button class="filter active" data-level="all">すべて</button>
+                        <button class="filter" data-level="bookmark">★ ブックマーク</button>
+                        <button class="filter" data-level="skipped">スキップ済み</button>
+                        <button class="filter" data-level="1">中学</button>
+                        <button class="filter" data-level="2">高校</button>
+                        <button class="filter" data-level="3">2級</button>
+                        <button class="filter" data-level="4">準1級</button>
+                    </div>
+                    <div class="dict-checkbox-group">
+                        <label class="dict-checkbox-wrap">
+                            <input type="checkbox" id="dict-unlocked-only"> 解放済みのみ表示
+                        </label>
+                        <div class="dict-pos-filters">
+                            <label><input type="checkbox" class="pos-filter" value="名" checked> 名詞</label>
+                            <label><input type="checkbox" class="pos-filter" value="動" checked> 動詞</label>
+                            <label><input type="checkbox" class="pos-filter" value="形" checked> 形容詞</label>
+                            <label><input type="checkbox" class="pos-filter" value="副" checked> 副詞</label>
+                        </div>
+                    </div>
+                </div>
+                <div id="dict-grid" class="dict-grid"></div>
+            </div>
+
+            <div id="tab-achievements" class="tab-body">
+                <div class="dict-header">
+                    <div class="dict-stats-row">
+                        <span>解除済み <strong id="achv-count">0</strong> / <span id="achv-total">0</span></span>
+                    </div>
+                    <div class="achv-stats-row">
+                        <span class="achv-stat">🎤 累計正解 <strong id="stat-total-correct">0</strong></span>
+                        <span class="achv-stat">🔥 自己ベストコンボ <strong id="stat-best-combo">0</strong></span>
+                    </div>
+                </div>
+                <div id="achv-grid" class="dict-grid"></div>
+            </div>
+        </section>
+    </div>
+
+    <!-- 施設購入モーダル -->
+    <div id="modal" class="modal-overlay" hidden>
+        <div class="modal-box">
+            <div class="modal-top">
+                <h3 id="modal-title">施設の購入確認</h3>
+                <button id="modal-close" class="modal-x">&times;</button>
+            </div>
+            <p id="modal-desc-text" class="modal-desc">施設名を発音して購入を確定してください</p>
+            <div class="modal-word-box">
+                <div id="modal-name-jp" class="modal-jp"></div>
+                <div id="modal-name-en" class="modal-en"></div>
+                <div id="modal-ipa" class="modal-ipa"></div>
+            </div>
+            <div class="modal-mic-area">
+                <button id="modal-mic" class="mic-btn small">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                </button>
+                <span id="modal-mic-label" class="mic-label">タップしてON</span>
+                <button id="modal-listen" class="btn-action" style="margin-left: 12px; padding: 6px 12px; font-size: 13px;">🔊 お手本</button>
+            </div>
+            <div id="modal-heard" class="heard-text" role="status" aria-live="polite">音声入力待ち</div>
+            <div id="modal-accuracy-badge" class="accuracy-badge" role="status" aria-live="polite" hidden>発音精度 <strong id="modal-accuracy-value">100%</strong></div>
+            <div class="modal-kb-always">
+                <span class="modal-kb-label">またはキーボードで入力：</span>
+                <div class="text-fallback">
+                    <input type="text" id="modal-text-input" placeholder="英単語を入力" autocomplete="off">
+                    <button id="modal-text-submit" class="btn-small">決定</button>
+                </div>
+            </div>
+            <button id="modal-cancel" class="btn-cancel">キャンセル</button>
+        </div>
+    </div>
+
+    <!-- 設定モーダル -->
+    <div id="settings-overlay" class="modal-overlay" hidden>
+        <div class="modal-content" style="max-width: 320px;">
+            <div class="modal-top">
+                <h3>ゲーム設定</h3>
+                <button id="settings-close" class="modal-x" aria-label="閉じる">&times;</button>
+            </div>
+            <div class="settings-group">
+                <label class="settings-label">画面の表示</label>
+                <label class="settings-toggle">
+                    <input type="checkbox" id="theme-toggle">
+                    🌙 ダークモード
+                </label>
+            </div>
+            <div class="settings-group">
+                <label class="settings-label">音量設定</label>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span>🔈</span>
+                    <input type="range" id="volume-slider" min="0" max="1" step="0.1" value="1.0" style="flex:1;">
+                    <span>🔊</span>
+                </div>
+            </div>
+            <div class="settings-group">
+                <label class="settings-label">お手本の声（音声が出ない場合は変更してください）</label>
+                <select id="voice-select" style="width: 100%; padding: 6px; font-size: 14px; border-radius: 4px; background: var(--bg); color: var(--text); border: 1px solid var(--border);"></select>
+            </div>
+            <div class="settings-group">
+                <label class="settings-label">お手本の再生速度</label>
+                <label class="settings-toggle">
+                    <input type="checkbox" id="slow-mode-toggle">
+                    🐢 常にゆっくり再生する
+                </label>
+            </div>
+            <div class="settings-group">
+                <label class="settings-label">
+                    難易度設定
+                    <div style="font-size: 11px; color: var(--text-faint); margin-top: 6px; padding: 6px; background: var(--bg-inset); border-radius: var(--radius-sm); border: 1px dashed var(--border);">
+                    ※救済判定：単語の約70%の文字が一致していれば、少しの間違いを許容して正解扱いにする機能です。
+                </div>
+                </label>
+                <div class="difficulty-options">
+                    <label class="diff-opt"><input type="radio" name="diff" value="easy"> <b>Easy</b><br><small>常に救済判定あり (報酬 x0.75)</small></label>
+                    <label class="diff-opt"><input type="radio" name="diff" value="normal"> <b>Normal</b><br><small>3回失敗で救済判定 (報酬 x1.0)</small></label>
+                    <label class="diff-opt"><input type="radio" name="diff" value="hard"> <b>Hard</b><br><small>常に完全一致のみ (報酬 x1.2)</small></label>
+                </div>
+            </div>
+            <div class="settings-group" style="margin-top: 32px; border-top: 1px solid var(--border); padding-top: 16px; text-align: center; margin-bottom: 0;">
+                <button id="reset" class="btn-reset" style="width: 100%;">🚨 データリセット (最初から)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ヘルプモーダル -->
+    <div id="modal-help" class="modal-overlay" hidden>
+        <div class="modal-box" style="text-align: left;">
+            <div class="modal-top">
+                <h3 style="margin: 0; color: var(--text-strong);">遊び方ガイド</h3>
+                <button id="modal-help-close" class="modal-x">&times;</button>
+            </div>
+            <div class="help-content">
+                <div class="help-item">
+                    <div class="help-icon">🎤</div>
+                    <div class="help-text"><strong>発音で稼ごう</strong><br>画面中央の単語をマイクで発音！正解すると資金（ドル）がもらえます。</div>
+                </div>
+                <div class="help-item">
+                    <div class="help-icon">🏢</div>
+                    <div class="help-text"><strong>施設で自動化</strong><br>資金で「施設」を買うと、放置していても毎秒自動で資金が増えるようになります。</div>
+                </div>
+                <div class="help-item">
+                    <div class="help-icon">📖</div>
+                    <div class="help-text"><strong>図鑑ボーナス</strong><br>新しい単語を5語登録するごとに、発音時にもらえるボーナスが永続アップ！</div>
+                </div>
+                <div class="help-item">
+                    <div class="help-icon">🔥</div>
+                    <div class="help-text"><strong>連続正解コンボ</strong><br>続けて正解すると「🔥n連続」のコンボが発生し、報酬が最大+50%まで上がります。間違えたりスキップするとリセットされます。</div>
+                </div>
+                <div class="help-item">
+                    <div class="help-icon">🎯</div>
+                    <div class="help-text"><strong>発音精度スコア</strong><br>発音するたびに一致率が「発音精度92%」のように表示されます。緑に近いほど正確な発音です。</div>
+                </div>
+                <div class="help-item">
+                    <div class="help-icon">⏭️</div>
+                    <div class="help-text"><strong>スキップと復習</strong><br>難しい単語は「スキップ」可能。図鑑に「仮登録」されるので後で再挑戦できます。</div>
+                </div>
+                <div class="help-item">
+                    <div class="help-icon">🔁</div>
+                    <div class="help-text"><strong>復習出題</strong><br>スキップした単語は「🔁復習」バッジとともに時々再出題されます。もう出さなくてよい場合は図鑑画面の「🗑」で復習リストから外せます。</div>
+                </div>
+                <div class="help-item">
+                    <div class="help-icon">🏆</div>
+                    <div class="help-text"><strong>実績</strong><br>発音や図鑑登録などの達成状況に応じて実績が解除されます。「実績」タブでいつでも確認できます。</div>
+                </div>
+                <div class="help-item">
+                    <div class="help-icon">🐢</div>
+                    <div class="help-text"><strong>お手本のゆっくり再生</strong><br>設定から「ゆっくり再生」をオンにすると、発音が聞き取りやすくなります。</div>
+                </div>
+                <div class="help-item">
+                    <div class="help-icon">🔖</div>
+                    <div class="help-text"><strong>ブックマーク機能</strong><br>図鑑画面の「★」を押すと単語を登録でき、「★のみ」で絞り込んで復習できます。</div>
+                </div>
+                <div class="help-item">
+                    <div class="help-icon">⚙️</div>
+                    <div class="help-text"><strong>難易度変更（救済判定）</strong><br>設定の難易度を変更することで判定の厳しさを調整できます。Easyなら常に少しのミスが許容されます。</div>
+                </div>
+                <div class="help-item">
+                    <div class="help-icon">⌨️</div>
+                    <div class="help-text"><strong>キーボード操作（PC推奨）</strong><br>Space：マイクON/OFF　L：お手本再生　S：スキップ</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- リセット確認モーダル -->
+    <div id="modal-confirm-reset" class="modal-overlay" hidden>
+        <div class="modal-box goal-box">
+            <div class="goal-icon">🚨</div>
+            <h3 class="goal-title">データをリセットしますか？</h3>
+            <p class="goal-desc">資金・図鑑・実績などすべてのデータが消去されます。<br>この操作は取り消せません。</p>
+            <button id="confirm-reset-yes" class="btn-danger">リセットする</button>
+            <button id="confirm-reset-cancel" class="btn-cancel">キャンセル</button>
+        </div>
+    </div>
+
+    <!-- 経済ゴール到達モーダル -->
+    <div id="modal-goal" class="modal-overlay" hidden>
+        <div class="modal-box goal-box">
+            <div class="goal-icon">🏆</div>
+            <h3 class="goal-title">経済ゴール達成！</h3>
+            <p class="goal-desc">全ての施設を揃え、発音クリッカーの「経済編」をクリアしました。<br>ここからは、じっくり単語を覚える旅を続けましょう。</p>
+            <div class="goal-stats">
+                <div class="goal-stat">
+                    <span class="goal-stat-label">総獲得額</span>
+                    <span id="goal-total-money" class="goal-stat-value">$0</span>
+                </div>
+                <div class="goal-stat">
+                    <span class="goal-stat-label">覚えた単語</span>
+                    <span id="goal-dict-count" class="goal-stat-value">0 / 513</span>
+                </div>
+            </div>
+            <button id="modal-goal-close" class="btn-cancel">閉じる</button>
+        </div>
+    </div>
+
+    <!-- 演出用 -->
+    <div id="floats"></div>
+    <div id="toasts" role="status" aria-live="polite"></div>
+
+    <script src="words.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
